@@ -12,7 +12,7 @@ import pytesseract
 from pytesseract import Output
 import numpy as np
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext
+from tkinter import filedialog, messagebox, scrolledtext, ttk
 from PIL import Image, ImageTk
 
 
@@ -34,52 +34,138 @@ class OCRApp:
         self.roi_start = None
         self.roi_box = None  # (x1, y1, x2, y2) in image coords
         self.photo_image = None  # Keep reference to avoid GC
+        self.colors = {
+            "bg": "#0f172a",
+            "card": "#111827",
+            "canvas_bg": "#0b1220",
+            "accent": "#6366f1",
+            "accent_active": "#818cf8",
+            "fg": "#e5e7eb",
+            "muted": "#9ca3af",
+            "border": "#1f2937",
+        }
 
+        self._build_styles()
         self._build_ui()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
+    def _build_styles(self) -> None:
+        self.root.configure(bg=self.colors["bg"])
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        style.configure(".", background=self.colors["bg"], foreground=self.colors["fg"], font=("Segoe UI", 10))
+        style.configure(
+            "Card.TFrame",
+            background=self.colors["card"],
+            relief="flat",
+        )
+        style.configure(
+            "Accent.TButton",
+            font=("Segoe UI Semibold", 10),
+            padding=(10, 6),
+            background=self.colors["accent"],
+            foreground="white",
+            borderwidth=0,
+        )
+        style.map(
+            "Accent.TButton",
+            background=[("active", self.colors["accent_active"])],
+            relief=[("pressed", "sunken")],
+        )
+        style.configure(
+            "Title.TLabel",
+            font=("Segoe UI Semibold", 16),
+            background=self.colors["card"],
+            foreground=self.colors["fg"],
+        )
+        style.configure(
+            "Subtitle.TLabel",
+            font=("Segoe UI", 10),
+            background=self.colors["card"],
+            foreground=self.colors["muted"],
+        )
+        style.configure(
+            "Status.TLabel",
+            font=("Segoe UI", 10),
+            padding=(10, 4),
+            background=self.colors["card"],
+            foreground=self.colors["accent"],
+        )
+
     def _build_ui(self) -> None:
-        control_frame = tk.Frame(self.root)
-        control_frame.pack(fill=tk.X, padx=8, pady=4)
-
-        tk.Button(control_frame, text="Load Image", command=self.load_image).pack(
-            side=tk.LEFT, padx=4
-        )
-        tk.Button(
-            control_frame, text="Start/Resume Camera", command=self.start_camera
-        ).pack(side=tk.LEFT, padx=4)
-        tk.Button(control_frame, text="Stop Camera", command=self.stop_camera).pack(
-            side=tk.LEFT, padx=4
-        )
-        tk.Button(control_frame, text="Run OCR", command=self.run_ocr).pack(
-            side=tk.LEFT, padx=4
-        )
-        tk.Button(control_frame, text="Clear ROI", command=self.clear_roi).pack(
-            side=tk.LEFT, padx=4
-        )
-
         self.status_var = tk.StringVar(value="Load an image or start the camera.")
-        tk.Label(control_frame, textvariable=self.status_var, fg="blue").pack(
-            side=tk.LEFT, padx=10
+
+        hero = ttk.Frame(self.root, style="Card.TFrame", padding=(12, 10))
+        hero.pack(fill=tk.X, padx=10, pady=(8, 6))
+        ttk.Label(hero, text="Text Reader", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(hero, text="OCR with ROI selection and live camera preview", style="Subtitle.TLabel").pack(
+            anchor="w", pady=(2, 0)
+        )
+        ttk.Label(hero, textvariable=self.status_var, style="Status.TLabel").pack(anchor="e", pady=(6, 0))
+
+        control_frame = ttk.Frame(self.root, style="Card.TFrame", padding=(10, 8))
+        control_frame.pack(fill=tk.X, padx=10, pady=(0, 8))
+        ttk.Button(control_frame, text="Load Image", style="Accent.TButton", command=self.load_image).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(
+            control_frame, text="Start/Resume Camera", style="Accent.TButton", command=self.start_camera
+        ).pack(side=tk.LEFT, padx=4)
+        ttk.Button(control_frame, text="Stop Camera", style="Accent.TButton", command=self.stop_camera).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(control_frame, text="Run OCR", style="Accent.TButton", command=self.run_ocr).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(control_frame, text="Clear ROI", style="Accent.TButton", command=self.clear_roi).pack(
+            side=tk.LEFT, padx=4
         )
 
+        content = ttk.Frame(self.root, style="Card.TFrame", padding=10)
+        content.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+
+        canvas_card = ttk.Frame(content, style="Card.TFrame", padding=8)
+        canvas_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        ttk.Label(canvas_card, text="Live View + ROI Overlay", style="Subtitle.TLabel").pack(anchor="w", pady=(0, 6))
         # Canvas for image/overlay + ROI drawing
         self.canvas = tk.Canvas(
-            self.root,
+            canvas_card,
             width=self.canvas_width,
             height=self.canvas_height,
-            bg="black",
+            bg=self.colors["canvas_bg"],
+            highlightthickness=1,
+            highlightbackground=self.colors["border"],
             cursor="crosshair",
         )
-        self.canvas.pack(padx=8, pady=4)
+        self.canvas.pack(fill=tk.BOTH, expand=True)
         self.canvas.bind("<ButtonPress-1>", self.on_mouse_press)
         self.canvas.bind("<B1-Motion>", self.on_mouse_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_mouse_release)
+        ttk.Label(
+            canvas_card,
+            text="Tip: drag to mark ROI, then run OCR. Clear ROI to scan the whole frame.",
+            style="Subtitle.TLabel",
+            wraplength=780,
+        ).pack(anchor="w", pady=(8, 0))
 
-        # Text output area
-        tk.Label(self.root, text="Extracted Text").pack(anchor="w", padx=8)
-        self.text_output = scrolledtext.ScrolledText(self.root, height=10, wrap=tk.WORD)
-        self.text_output.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+        text_card = ttk.Frame(content, style="Card.TFrame", padding=8)
+        text_card.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 0))
+        ttk.Label(text_card, text="Extracted Text", style="Subtitle.TLabel").pack(anchor="w", pady=(0, 6))
+        self.text_output = scrolledtext.ScrolledText(text_card, height=24, wrap=tk.WORD)
+        self.text_output.configure(
+            background=self.colors["canvas_bg"],
+            foreground=self.colors["fg"],
+            insertbackground=self.colors["accent"],
+            relief=tk.FLAT,
+            borderwidth=1,
+            highlightthickness=1,
+            highlightbackground=self.colors["border"],
+        )
+        self.text_output.pack(fill=tk.BOTH, expand=True)
 
     # ----------------- Utility functions -----------------
     def _cv_to_tk_image(self, cv_img: np.ndarray):
@@ -136,7 +222,9 @@ class OCRApp:
         x1, y1, x2, y2 = self.roi_box
         c1 = self._image_to_canvas_coords(x1, y1)
         c2 = self._image_to_canvas_coords(x2, y2)
-        self.canvas.create_rectangle(*c1, *c2, outline="yellow", width=2, tags="roi")
+        self.canvas.create_rectangle(
+            *c1, *c2, outline=self.colors["accent"], width=2, tags="roi"
+        )
 
     # ----------------- Event handlers -----------------
     def on_mouse_press(self, event) -> None:
