@@ -2,9 +2,8 @@
   "timestamp": "2026-02-01 18:13:25",
   "embedding_dim": 512,
   "names": [
-    "bonheur",
-    "hackim",
-    "hackim2"
+    "bonheur"
+    
   ],
   "samples_used": 30
 }
