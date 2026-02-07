@@ -17,6 +17,10 @@ ENROLL_DIR = DATA_DIR / "enroll"
 DEBUG_ALIGNED_DIR = DATA_DIR / "debug_aligned"
 MODELS_DIR = PROJECT_ROOT / "models"
 
+# History directory for locked person activity logs
+HISTORY_DIR = DATA_DIR / "history"
+ACTIVITY_LOGS_DIR = HISTORY_DIR  # Alias for backward compatibility
+
 # Database files
 DB_NPZ_PATH = DB_DIR / "face_db.npz"
 DB_JSON_PATH = DB_DIR / "face_db.json"
@@ -107,7 +111,7 @@ ACCEPT_HOLD_FRAMES = 3  # Hold "accepted" state for N frames
 # CAMERA SETTINGS
 # ============================================================================
 
-CAMERA_INDEX = 0 # Default: first camera
+CAMERA_INDEX = 2 # Default: first camera
 CAMERA_FRAME_WIDTH = 640
 CAMERA_FRAME_HEIGHT = 480
 CAMERA_FPS_TARGET = 30

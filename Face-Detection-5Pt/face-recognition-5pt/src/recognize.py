@@ -17,6 +17,7 @@ from .align import FaceAligner
 from .embed import ArcFaceEmbedder
 
 from . import actions as action_module
+from .activity_logger import ActivityLogger
 
 
 def load_database():
@@ -97,8 +98,13 @@ def main(start_fullscreen: bool = False):
     
     # Optional: lock = highlight one person as "(locked)" while still recognizing everyone
     lock_name: Optional[str] = choose_lock_identity(names)
+    
+    # Initialize activity logger if person is locked
+    activity_logger: Optional[ActivityLogger] = None
     if lock_name:
         print(f"Lock: {lock_name} (they will show as '... (locked)'; others still recognized by name)")
+        print(f"✓ Activity history will be saved to: {config.HISTORY_DIR}/")
+        activity_logger = ActivityLogger(lock_name, config.HISTORY_DIR)
     else:
         print("Lock: (none) – all enrolled identities shown by name")
     
@@ -182,13 +188,14 @@ def main(start_fullscreen: bool = False):
             faces = detector.detect(frame)
             
             # Smile / blink detection (uses MediaPipe Face Mesh on full frame)
+            detected_actions = []
             if faces and hasattr(action_module, "detect_smile_blink"):
                 cooldown = getattr(config, "LOCK_ACTION_COOLDOWN_FRAMES", 10)
-                detected, baseline_mouth_width, mouth_width_samples = action_module.detect_smile_blink(
+                detected_actions, baseline_mouth_width, mouth_width_samples = action_module.detect_smile_blink(
                     frame, baseline_mouth_width, mouth_width_samples,
                     last_action_frame, frame_idx, cooldown_frames=cooldown,
                 )
-                for act in detected:
+                for act in detected_actions:
                     action_display.append((act.capitalize() + "!", ACTION_DISPLAY_DURATION))
             # Decay action display
             action_display = [(label, n - 1) for label, n in action_display if n > 1]
@@ -226,6 +233,20 @@ def main(start_fullscreen: bool = False):
                 
                 # Draw based on lock status
                 if is_locked_person:
+                    # Log activities for locked person
+                    if activity_logger:
+                        # Calculate face center
+                        face_center = ((face.x1 + face.x2) / 2, (face.y1 + face.y2) / 2)
+                        
+                        # Log detected blinks and smiles
+                        for act in detected_actions:
+                            activity_logger.log_activity(act, frame_idx, face_center)
+                        
+                        # Detect and log face movement
+                        movements = activity_logger.detect_and_log_movement(face_center, frame_idx)
+                        for movement in movements:
+                            action_display.append((movement.replace("_", " ").title() + "!", ACTION_DISPLAY_DURATION))
+                    
                     # For locked person: show bounding box, landmarks, and full details
                     # Draw bounding box
                     cv2.rectangle(vis, (face.x1, face.y1), (face.x2, face.y2), color, 2)
@@ -271,7 +292,7 @@ def main(start_fullscreen: bool = False):
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2
             )
             
-            # Action labels (smile / blink) – show for a short time after detection
+            # Action labels (smile / blink / movement) – show for a short time after detection
             y_action = 58
             for label, _ in action_display:
                 cv2.putText(
@@ -279,6 +300,35 @@ def main(start_fullscreen: bool = False):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2
                 )
                 y_action += 28
+            
+            # Activity statistics (if logging enabled)
+            if activity_logger:
+                stats = activity_logger.get_statistics()
+                y_stat = vis.shape[0] - 140
+                cv2.putText(
+                    vis, "Activity Log:", (10, y_stat),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2
+                )
+                y_stat += 22
+                cv2.putText(
+                    vis, f"Blinks: {stats['counts']['blink']}", (10, y_stat),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1
+                )
+                y_stat += 20
+                cv2.putText(
+                    vis, f"Smiles: {stats['counts']['smile']}", (10, y_stat),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1
+                )
+                y_stat += 20
+                cv2.putText(
+                    vis, f"Move L/R: {stats['counts']['move_left']}/{stats['counts']['move_right']}", (10, y_stat),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1
+                )
+                y_stat += 20
+                cv2.putText(
+                    vis, f"Move U/D: {stats['counts']['move_up']}/{stats['counts']['move_down']}", (10, y_stat),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1
+                )
             
             # Controls hint
             cv2.putText(
@@ -300,6 +350,10 @@ def main(start_fullscreen: bool = False):
                     print("Lock cleared (locked person no longer in database)")
                 print(f"✓ Reloaded {len(db)} identities")
             elif key == ord("l"):
+                # Save activity log before clearing lock
+                if activity_logger:
+                    activity_logger.save_summary()
+                    activity_logger = None
                 lock_name = None
                 print("Lock cleared – no one highlighted as locked")
             elif key == ord("f"):
@@ -318,6 +372,10 @@ def main(start_fullscreen: bool = False):
                 print(f"Threshold: {threshold:.2f}")
     
     finally:
+        # Save activity log before exiting
+        if activity_logger:
+            activity_logger.save_summary()
+        
         cap.release()
         cv2.destroyAllWindows()
     

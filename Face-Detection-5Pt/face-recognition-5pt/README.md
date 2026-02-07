@@ -105,7 +105,8 @@ face-recognition-5pt/
 │   │   └── Bob/                  # Person 2 samples
 │   │       ├── 1767874944225.jpg
 │   │       └── 1767874946090.jpg
-│   └── debug_aligned/            # Aligned face crops (optional)
+│   ├── debug_aligned/            # Aligned face crops (optional)
+│   └── activity_logs/            # Activity logs for locked persons (NEW)
 │
 ├── models/
 │   └── embedder_arcface.onnx     # ArcFace model (download required)
@@ -118,10 +119,16 @@ face-recognition-5pt/
 │   ├── landmarks.py              # MediaPipe 5-point landmarks
 │   ├── align.py                  # Face alignment (5pt → 112×112)
 │   ├── embed.py                  # ArcFace embedding extraction
-│   ├── haar_5pt.py               # Combined Haar + MediaPipe detector
+│   ├── haar_5pt.py               # Combined Haar + MediaPipe detector (multi-face)
+│   ├── actions.py                # Blink/smile detection module
+│   ├── activity_logger.py        # Activity logging system (NEW)
+│   ├── view_activity_logs.py     # Activity log viewer (NEW)
 │   ├── enroll.py                 # Enrollment pipeline
 │   ├── evaluate.py               # Threshold evaluation
-│   └── recognize.py              # Live recognition
+│   └── recognize.py              # Live recognition with multi-person support
+│
+├── examples/
+│   └── activity_logging_example.py  # Activity logging demo (NEW)
 │
 ├── requirements.txt              # Python dependencies
 ├── setup.bat                     # Windows setup script
@@ -319,18 +326,75 @@ Run real-time face recognition against the enrolled database:
 python -m src.recognize
 ```
 
-### Display
+### Multi-Person Recognition
 
-- Green box + green name: **Enrolled person** (accepted)
-- Red box + "Unknown": **Not in database** or distance > threshold
-- Confidence bar shows distance
+The system now supports **recognizing multiple people simultaneously**!
+
+When prompted to lock to a person:
+
+- **Press Enter**: Recognize all enrolled people (shows only their names)
+- **Enter name/number**: Lock to a specific person (they get full visualization with landmark squares)
+
+### Display Modes
+
+**For Locked Person:**
+
+- Green rectangle around face
+- 5 landmark squares visible
+- Name with "(locked)" label
+- Confidence bar and distance
+
+**For Other Recognized People:**
+
+- Only their name shown above face (no rectangle)
+
+**For Unknown People:**
+
+- Red rectangle
+- "Unknown" label
+
+### Window Options
+
+**Standard Mode:**
+
+```bash
+python -m src.recognize
+```
+
+**Fullscreen Mode:**
+
+```bash
+python -m src.recognize --fullscreen
+# or
+python -m src.recognize -f
+```
+
+See [WINDOW_USAGE.md](WINDOW_USAGE.md) for more display options.
+
+### Activity Logging
+
+When you lock to a specific person, the system **automatically tracks and logs their activities**:
+
+- ✓ **Blinks** - Eye blink detection
+- ✓ **Smiles** - Smile detection
+- ✓ **Face Movements** - Left/Right/Up/Down tracking
+
+Activity logs are saved with timestamps in `data/activity_logs/` and can be viewed later:
+
+```bash
+python src/view_activity_logs.py
+```
+
+See [ACTIVITY_LOGGING.md](ACTIVITY_LOGGING.md) for detailed documentation.
 
 ### Controls
 
 | Key | Action                                         |
 | --- | ---------------------------------------------- |
-| Q   | Quit                                           |
+| Q   | Quit (saves activity log if locked)            |
 | R   | Reload database (useful after re-enrollment)   |
+| L   | Clear lock (saves activity log)                |
+| F   | Toggle fullscreen mode                         |
 | +   | Increase threshold (more accepts, higher FAR)  |
 | -   | Decrease threshold (fewer accepts, higher FRR) |
 
@@ -544,6 +608,62 @@ If you encounter issues:
 
 ---
 
+## ✨ New Features
+
+### Multi-Person Recognition (Simultaneous)
+
+The system now detects and recognizes **multiple people at once**:
+
+- Processes up to 5 faces simultaneously
+- Each person is independently recognized
+- Lock mode highlights one person while still recognizing others
+
+### Activity Logging & Tracking
+
+Comprehensive activity logging for the locked person:
+
+- **Blink Detection**: Tracks eye blinks with timestamps
+- **Smile Detection**: Detects smiles with baseline calibration
+- **Movement Tracking**: Records face movements (left/right/up/down)
+- **CSV Logs**: Detailed timeline of all activities
+- **JSON Summaries**: Session statistics and analysis
+- **Log Viewer**: Interactive tool to view and analyze logs
+
+**Example Use Cases:**
+
+- Security monitoring
+- Behavioral research
+- User engagement tracking
+- Attention monitoring
+- Testing and debugging
+
+See [ACTIVITY_LOGGING.md](ACTIVITY_LOGGING.md) for complete documentation.
+
+### Enhanced Window Controls
+
+- **Fullscreen Mode**: Start with `--fullscreen` or toggle with `f` key
+- **Resizable Window**: Large 1920x1080 default size
+- **Aspect Ratio**: Maintained during resize
+- **Maximize Support**: Works with OS window controls
+
+See [WINDOW_USAGE.md](WINDOW_USAGE.md) for display options.
+
+### Demo & Examples
+
+Try the activity logging demo:
+
+```bash
+python examples/activity_logging_example.py
+```
+
+View saved activity logs:
+
+```bash
+python src/view_activity_logs.py
+```
+
+---
+
 ## 🎯 Next Steps
 
 After successful setup:
@@ -551,8 +671,11 @@ After successful setup:
 1. **Understand alignment**: Read comments in `src/align.py`
 2. **Understand embeddings**: Read comments in `src/embed.py`
 3. **Modify thresholds**: Experiment with `DEFAULT_DISTANCE_THRESHOLD` in `config.py`
-4. **Add your own modules**: Extend with face quality checks, anti-spoofing, etc.
-5. **Deploy**: Package into standalone application
+4. **Try multi-person recognition**: Lock to one person, have multiple people in frame
+5. **Test activity logging**: Lock to someone and track their activities
+6. **Analyze activity patterns**: Use the log viewer to understand behavioral data
+7. **Add your own modules**: Extend with face quality checks, anti-spoofing, etc.
+8. **Deploy**: Package into standalone application
 
 ---
 
